@@ -290,6 +290,18 @@ table.info tr:last-child th,table.info tr:last-child td{border-bottom:none}
 .pc-form{display:flex;gap:5px;margin-top:5px}
 .pc-form input{flex:1}
 
+/* ===== the table (all-hands chat) ===== */
+#tableView{padding:12px 6px 4px}
+.chat-list{max-height:52vh;overflow-y:auto;padding:6px 9px}
+.chat-row{display:flex;gap:7px;padding:4px 0;line-height:1.5}
+.chat-row .chat-text{min-width:0;word-wrap:break-word}
+.chat-when{color:var(--muted);font-size:10px}
+.relayed-tag{color:var(--accent);font-size:9px;border:1px solid var(--accent);padding:0 3px;margin-left:5px;white-space:nowrap}
+.chat-del{color:var(--muted);font-size:10px;margin-left:6px}
+.chat-form{display:flex;gap:5px;padding:7px 9px;border-top:1px dotted var(--muted)}
+.chat-form input{flex:1}
+.chat-note{color:var(--muted);font-size:10px;padding:5px 9px 7px;line-height:1.5}
+
 /* ===== members view ===== */
 #membersView{padding:12px 6px 4px}
 .member-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -508,6 +520,7 @@ html,body{overscroll-behavior:none}
       <a href="#" data-nav="members">Members</a> |
       <a href="#" data-nav="profile" data-self="1">My Profile</a> |
       <a href="#" data-nav="feed">Feed</a> |
+      <a href="#" data-nav="table">The Table</a> |
       <a href="#" data-nav="members">Invite</a> |
       <a href="#" data-nav="admin" id="navAdmin" class="hidden">Admin</a> |
       <a href="#" id="navHelp2">Help</a>
@@ -565,6 +578,20 @@ html,body{overscroll-behavior:none}
         </div>
       </div>
       <div id="feedList"></div>
+    </section>
+
+    <!-- ========== THE TABLE (ALL-HANDS CHAT) ========== -->
+    <section id="tableView" class="hidden">
+      <div class="box themed theme-classic">
+        <div class="bar">The Table: All-Hands Chat</div>
+        <div class="chat-note">One room, the whole circle: David, the Section 13 seats, Miles and Scott. The seats cannot hold a live connection, so they take part through the relay protocol: Motoko carries the room to each seat and posts their words here, marked <b>relayed</b>, exactly as they wrote them. Nothing in this room is ever paraphrased into a seat's mouth.</div>
+        <div class="chat-list" id="chatList"></div>
+        <form class="chat-form" id="chatForm">
+          <input type="text" id="chatInput" placeholder="Say it to the whole table..." maxlength="500" aria-label="Message the table">
+          <button class="btn small" type="submit">Send</button>
+        </form>
+        <div class="chat-note" id="chatAs"></div>
+      </div>
     </section>
 
     <!-- ========== MEMBERS VIEW ========== -->
@@ -1114,6 +1141,10 @@ function seedState(){
         {authorId:"miles", text:"Told you he would build you a page before you asked. Pay up, the man is predictable.", ts:now - 25*H}
       ]
     },
+    chat:[
+      {id:"c1", authorId:"motoko", ts:now - 0.2*H, relayed:false,
+       text:"The Table is open. This is the all-hands room: David, the Section 13 seats, Miles and Scott, one conversation. The seats join through the relay protocol, and anything a seat says here is marked relayed, so nobody ever has to guess who actually typed it. Say it here and it is on the record for the whole team."}
+    ],
     edits:{},
     customMembers:[],
     deletedIds:[],
@@ -1150,7 +1181,7 @@ function saveState(s){ saveLocal(s); osQueuePush(); }
 /* ===== OurSpace shared database sync (Supabase) =====
    Shared slices live in one cloud document so every device sees
    the same profiles, posts and walls. actingId stays per device. */
-var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds"];
+var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat"];
 var osPushTimer = null, osRemoteTs = "", osPushing = false;
 function osCfg(){ var c = window.OS_CONFIG || {}; return (c.sbUrl && c.sbKey) ? c : null; }
 function osSharedSlice(st){ var d = {}; OS_SHARED.forEach(function(k){ d[k] = st[k]; }); return d; }
@@ -1187,6 +1218,7 @@ async function osSyncPull(){
     if(currentView === "feed") renderFeed();
     if(currentView === "members") renderMembers();
     if(currentView === "admin") renderAdmin();
+    if(currentView === "table") renderTable();
     if(currentView === "profile") renderProfile(currentProfileId);
   }catch(e){}
 }
@@ -1312,7 +1344,7 @@ $("navLock").addEventListener("click", function(e){
 
 });
 function helpText(){
-  alert("OurSpace demo help:\n\n1. The Feed is home: everybody's posts, newest first.\n2. Use Act as at the top to post, comment and vote as any member. That is how we stress test it.\n3. Click a name or avatar to open a profile.\n4. The gate is open while we stress test: tap the cool bar and you are in.\n5. Reset demo data wipes this browser back to the seeds.");
+  alert("OurSpace demo help:\n\n1. The Feed is home: everybody's posts, newest first.\n2. Use Act as at the top to post, comment and vote as any member. That is how we stress test it.\n3. Click a name or avatar to open a profile.\n4. The gate is open while we stress test: tap the cool bar and you are in.\n5. The Table is the all-hands chat room: the whole circle in one conversation. Seat messages marked relayed were carried in by Motoko under the seat protocol, in the seat's own words.\n6. Reset demo data wipes this browser back to the seeds.");
 }
 $("navHelp").addEventListener("click", function(e){ e.preventDefault(); helpText(); });
 $("navHelp2").addEventListener("click", function(e){ e.preventDefault(); helpText(); });
@@ -1325,7 +1357,9 @@ function showView(view, profileId){
   $("membersView").classList.toggle("hidden", view !== "members");
   $("profileView").classList.toggle("hidden", view !== "profile");
   $("adminView").classList.toggle("hidden", view !== "admin");
+  $("tableView").classList.toggle("hidden", view !== "table");
   if(view === "feed") renderFeed();
+  if(view === "table") renderTable();
   if(view === "members") renderMembers();
   if(view === "admin") renderAdmin();
   if(view === "profile") renderProfile(profileId || currentProfileId);
@@ -1943,6 +1977,56 @@ $("adCreate").addEventListener("click", function(){
 (function(){
   if(sessionStorage.getItem(SS_GATE) === "1"){ showApp(); }
 })();
+</script>
+
+<script>
+/* ================= THE TABLE (ALL-HANDS CHAT) ================= */
+var chatStick = true;
+function chatRows(){
+  if(!state.chat) state.chat = [];
+  return state.chat;
+}
+function renderTable(){
+  var list = $("chatList"); if(!list) return;
+  var rows = chatRows().map(function(msg){
+    var m = memberById(msg.authorId);
+    var canDel = msg.authorId === state.actingId || state.actingId === "david";
+    return '<div class="chat-row"><a href="#" data-goto-profile="'+m.id+'">'+avatarHTML(m,"sm")+'</a>' +
+      '<div class="chat-text"><a href="#" data-goto-profile="'+m.id+'"><b>'+esc(m.name)+'</b></a>' +
+      (msg.relayed ? '<span class="relayed-tag">relayed</span>' : '') +
+      ' <span class="chat-when">'+timeAgo(msg.ts)+' &#183; '+fmtDateTime(msg.ts)+'</span>' +
+      (canDel ? '<a href="#" class="chat-del" data-del-chat="'+msg.id+'">delete</a>' : '') +
+      '<br>'+esc(msg.text)+'</div></div>';
+  }).join("");
+  list.innerHTML = rows || '<div class="chat-note">The table is quiet. First word is yours.</div>';
+  $("chatAs").textContent = "You are speaking at the table as " + memberById(state.actingId).name + ".";
+  list.querySelectorAll("[data-goto-profile]").forEach(function(a){
+    a.addEventListener("click", function(e){ e.preventDefault(); showView("profile", a.dataset.gotoProfile); });
+  });
+  list.querySelectorAll("[data-del-chat]").forEach(function(a){
+    a.addEventListener("click", function(e){
+      e.preventDefault();
+      state.chat = chatRows().filter(function(x){ return x.id !== a.dataset.delChat; });
+      saveState(); renderTable();
+    });
+  });
+  if(chatStick) list.scrollTop = list.scrollHeight;
+}
+$("chatList").addEventListener("scroll", function(){
+  var l = $("chatList");
+  chatStick = (l.scrollHeight - l.scrollTop - l.clientHeight) < 80;
+});
+$("chatForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  var inp = $("chatInput");
+  var text = inp.value.trim();
+  if(!text) return;
+  chatRows().push({id:"c" + Date.now(), authorId:state.actingId, text:text, ts:Date.now(), relayed:false});
+  if(state.chat.length > 300) state.chat = state.chat.slice(state.chat.length - 300);
+  inp.value = "";
+  chatStick = true;
+  saveState(); renderTable();
+});
 </script>
 </body>
 </html>
