@@ -309,6 +309,11 @@ table.info tr:last-child th,table.info tr:last-child td{border-bottom:none}
 .chat-form{display:flex;gap:5px;padding:7px 9px;border-top:1px dotted var(--muted)}
 .chat-form input{flex:1}
 .chat-note{color:var(--muted);font-size:10px;padding:5px 9px 7px;line-height:1.5}
+.thread{border-top:1px solid var(--border)}
+.thread-head{display:flex;gap:8px;align-items:baseline;width:100%;background:var(--cellbg);border:none;border-bottom:1px solid var(--border);padding:8px 10px;color:var(--text);font:inherit;font-size:12px;font-weight:bold;cursor:pointer;text-align:left}
+.thread-head:hover{color:var(--accent)}
+.thread-meta{color:var(--muted);font-weight:normal;font-size:10px;margin-left:auto;flex:none;white-space:nowrap}
+.thread-body{padding:4px 0}
 
 /* ===== members view ===== */
 #membersView{padding:12px 6px 4px}
@@ -599,7 +604,7 @@ html,body{overscroll-behavior:none}
     <section id="tableView" class="hidden">
       <div class="box themed theme-classic">
         <div class="bar">The Table: All-Hands Chat</div>
-        <div class="chat-note">One room, the whole circle: the Chief and the Section 13 seats. The seats cannot hold a live connection, so they take part through the relay protocol: Motoko carries the room to each seat and posts their words here, marked <b>relayed</b>, exactly as they wrote them. Nothing in this room is ever paraphrased into a seat's mouth. This room is for meetings and the official record. Casual talk lives in The Lounge.</div>
+        <div class="chat-note">One room, the whole circle: the Chief and the Section 13 seats. The seats cannot hold a live connection, so they take part through the relay protocol: Motoko carries the room to each seat and posts their words here, marked <b>relayed</b>, exactly as they wrote them. Nothing in this room is ever paraphrased into a seat's mouth. This room is for meetings and the official record. Casual talk lives in The Lounge. Each round sits under its own title below: tap a title to open that conversation, tap it again to fold it away.</div>
         <div class="chat-list" id="chatList"></div>
         <form class="chat-form" id="chatForm">
           <input type="text" id="chatInput" placeholder="Say it to the whole table..." maxlength="500" aria-label="Message the table">
@@ -1203,10 +1208,11 @@ function saveState(s){ saveLocal(s); osQueuePush(); }
 /* ===== OurSpace shared database sync (Supabase) =====
    Shared slices live in one cloud document so every device sees
    the same profiles, posts and walls. actingId stays per device. */
-var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat", "lounge"];
+var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat", "lounge", "threads"];
 var osPushTimer = null, osRemoteTs = "", osPushing = false;
 var openComments = {};
 var openReplies = {};
+var openThreads = {};
 function osCfg(){ var c = window.OS_CONFIG || {}; return (c.sbUrl && c.sbKey) ? c : null; }
 function osSharedSlice(st){ var d = {}; OS_SHARED.forEach(function(k){ d[k] = st[k]; }); return d; }
 function osHeaders(){ var c = osCfg(); return { "apikey": c.sbKey, "Authorization": "Bearer " + c.sbKey, "Content-Type": "application/json" }; }
@@ -2100,19 +2106,68 @@ function chatRows(){
   if(!state.chat) state.chat = [];
   return state.chat;
 }
+var THREADS_FALLBACK = [
+  {id:"mtg-2026-11-20", title:"Team meeting: how do we all meet in one place?", ts:1795239444631},
+  {id:"thinktank-2026-11-21", title:"The think tank house: ESTIMA", ts:1795247186550}
+];
+function tableThreads(){
+  if(state.threads && state.threads.length) return state.threads;
+  return THREADS_FALLBACK;
+}
+function threadIdFor(msg){
+  if(msg.thread) return msg.thread;
+  if(msg.ts >= 1795247186550) return "thinktank-2026-11-21";
+  return "mtg-2026-11-20";
+}
+function activeThreadId(){
+  var best = null, bestTs = -1;
+  chatRows().forEach(function(msg){
+    if(msg.ts > bestTs){ bestTs = msg.ts; best = threadIdFor(msg); }
+  });
+  return best;
+}
+function chatRowHTML(msg){
+  var m = memberById(msg.authorId);
+  var canDel = msg.authorId === state.actingId || isAdminId(state.actingId);
+  return '<div class="chat-row"><a href="#" data-goto-profile="'+m.id+'">'+avatarHTML(m,"sm")+'</a>' +
+    '<div class="chat-text"><a href="#" data-goto-profile="'+m.id+'"><b>'+esc(m.name)+'</b></a>' +
+    (msg.relayed ? '<span class="relayed-tag">relayed</span>' : '') +
+    ' <span class="chat-when">'+timeAgo(msg.ts)+' &#183; '+fmtDateTime(msg.ts)+'</span>' +
+    (canDel ? '<a href="#" class="chat-del" data-del-chat="'+msg.id+'">delete</a>' : '') +
+    '<br>'+esc(msg.text)+'</div></div>';
+}
 function renderTable(){
   var list = $("chatList"); if(!list) return;
-  var rows = chatRows().map(function(msg){
-    var m = memberById(msg.authorId);
-    var canDel = msg.authorId === state.actingId || isAdminId(state.actingId);
-    return '<div class="chat-row"><a href="#" data-goto-profile="'+m.id+'">'+avatarHTML(m,"sm")+'</a>' +
-      '<div class="chat-text"><a href="#" data-goto-profile="'+m.id+'"><b>'+esc(m.name)+'</b></a>' +
-      (msg.relayed ? '<span class="relayed-tag">relayed</span>' : '') +
-      ' <span class="chat-when">'+timeAgo(msg.ts)+' &#183; '+fmtDateTime(msg.ts)+'</span>' +
-      (canDel ? '<a href="#" class="chat-del" data-del-chat="'+msg.id+'">delete</a>' : '') +
-      '<br>'+esc(msg.text)+'</div></div>';
+  var msgs = chatRows().slice().sort(function(a,b){ return a.ts - b.ts; });
+  var groups = [], byId = {};
+  tableThreads().forEach(function(t){
+    var g = {id:t.id, title:t.title, ts:t.ts, msgs:[]};
+    groups.push(g); byId[t.id] = g;
+  });
+  var openGroup = {id:null, title:"Open table", ts:0, msgs:[]};
+  msgs.forEach(function(msg){
+    var g = byId[threadIdFor(msg)] || openGroup;
+    g.msgs.push(msg);
+  });
+  if(openGroup.msgs.length) groups.push(openGroup);
+  groups = groups.filter(function(g){ return g.msgs.length; });
+  groups.forEach(function(g){ g.latest = g.msgs[g.msgs.length - 1].ts; });
+  groups.sort(function(a,b){ return b.latest - a.latest; });
+  var html = groups.map(function(g, gi){
+    var key = g.id || "open";
+    var isOpen = openThreads[key] !== undefined ? openThreads[key] : (gi === 0);
+    var first = g.msgs[0];
+    return '<div class="thread">' +
+      '<button type="button" class="thread-head" data-thread-toggle="'+key+'">' +
+        '<span class="thread-arrow">'+(isOpen ? "&#9662;" : "&#9656;")+'</span>' +
+        '<span>'+esc(g.title)+'</span>' +
+        '<span class="thread-meta">'+fmtDateTime(first.ts)+' &#183; '+g.msgs.length+(g.msgs.length === 1 ? " message" : " messages")+'</span>' +
+      '</button>' +
+      '<div class="thread-body" data-thread-body="'+key+'"'+(isOpen ? "" : " hidden")+'>' +
+        g.msgs.map(chatRowHTML).join("") +
+      '</div></div>';
   }).join("");
-  list.innerHTML = rows || '<div class="chat-note">The table is quiet. First word is yours.</div>';
+  list.innerHTML = html || '<div class="chat-note">The table is quiet. First word is yours.</div>';
   $("chatAs").textContent = "You are speaking at the table as " + memberById(state.actingId).name + ".";
   list.querySelectorAll("[data-goto-profile]").forEach(function(a){
     a.addEventListener("click", function(e){ e.preventDefault(); showView("profile", a.dataset.gotoProfile); });
@@ -2124,7 +2179,18 @@ function renderTable(){
       saveState(); renderTable();
     });
   });
-  if(chatStick) list.scrollTop = list.scrollHeight;
+  list.querySelectorAll("[data-thread-toggle]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var key = b.dataset.threadToggle;
+      var body = list.querySelector('[data-thread-body="'+key+'"]');
+      if(!body) return;
+      var open = body.hasAttribute("hidden");
+      if(open){ body.removeAttribute("hidden"); openThreads[key] = true; }
+      else { body.setAttribute("hidden", ""); openThreads[key] = false; }
+      var arrow = b.querySelector(".thread-arrow");
+      if(arrow) arrow.innerHTML = open ? "&#9662;" : "&#9656;";
+    });
+  });
 }
 $("chatList").addEventListener("scroll", function(){
   var l = $("chatList");
@@ -2135,7 +2201,10 @@ $("chatForm").addEventListener("submit", function(e){
   var inp = $("chatInput");
   var text = inp.value.trim();
   if(!text) return;
-  chatRows().push({id:"c" + Date.now(), authorId:state.actingId, text:text, ts:Date.now(), relayed:false});
+  var newMsg = {id:"c" + Date.now(), authorId:state.actingId, text:text, ts:Date.now(), relayed:false};
+  var atid = activeThreadId(); if(atid) newMsg.thread = atid;
+  chatRows().push(newMsg);
+  openThreads[atid || "open"] = true;
   if(state.chat.length > 300) state.chat = state.chat.slice(state.chat.length - 300);
   inp.value = "";
   chatStick = true;
