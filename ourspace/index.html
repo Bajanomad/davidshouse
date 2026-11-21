@@ -282,6 +282,9 @@ table.info tr:last-child th,table.info tr:last-child td{border-bottom:none}
 .poll-fill{background:var(--accent);height:100%}
 .poll-meta{color:var(--muted);font-size:10px;margin-top:2px}
 .p-comments{border-top:1px dotted var(--muted);padding:5px 9px 7px}
+.pc-toggle{background:none;border:none;padding:2px 0 4px;color:var(--link);font:inherit;font-size:11px;font-weight:bold;cursor:pointer;letter-spacing:.4px}
+.pc-toggle:hover{color:var(--accent)}
+.pc-list{margin-top:2px}
 .pc-row{display:flex;gap:7px;padding:3px 0;line-height:1.5}
 .pc-row .pc-text{min-width:0;word-wrap:break-word}
 .pc-when{color:var(--muted);font-size:10px}
@@ -1195,6 +1198,7 @@ function saveState(s){ saveLocal(s); osQueuePush(); }
    the same profiles, posts and walls. actingId stays per device. */
 var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat", "lounge"];
 var osPushTimer = null, osRemoteTs = "", osPushing = false;
+var openComments = {};
 function osCfg(){ var c = window.OS_CONFIG || {}; return (c.sbUrl && c.sbKey) ? c : null; }
 function osSharedSlice(st){ var d = {}; OS_SHARED.forEach(function(k){ d[k] = st[k]; }); return d; }
 function osHeaders(){ var c = osCfg(); return { "apikey": c.sbKey, "Authorization": "Bearer " + c.sbKey, "Content-Type": "application/json" }; }
@@ -1487,6 +1491,10 @@ function postHTML(p){
       '<div class="pc-text"><a href="#" data-goto-profile="'+cm.id+'"><b>'+esc(cm.name)+'</b></a> '+esc(c.text) +
       ' <span class="pc-when">'+timeAgo(c.ts)+'</span></div></div>';
   }).join("");
+  var nComments = p.comments.length;
+  var cOpen = !!openComments[p.id];
+  var cToggle = nComments ? '<button type="button" class="pc-toggle" data-comments-toggle="'+p.id+'">'+(cOpen ? "&#9662;" : "&#9656;")+' '+nComments+(nComments === 1 ? " reply" : " replies")+'</button>' : "";
+  var cList = nComments ? '<div class="pc-list" data-comments-list="'+p.id+'"'+(cOpen ? "" : " hidden")+'>'+comments+'</div>' : "";
   return '<div class="box post themed theme-classic">' +
     '<div class="p-head"><a href="#" data-goto-profile="'+m.id+'">'+avatarHTML(m,"")+'</a>' +
       '<div><a href="#" data-goto-profile="'+m.id+'" class="p-who">'+esc(m.name)+'</a>' +
@@ -1494,7 +1502,7 @@ function postHTML(p){
       '<span class="p-type">'+p.type+'</span>' +
       (p.authorId === state.actingId ? '<a href="#" class="p-del" data-del-post="'+p.id+'">delete</a>' : '') +
     '</div>' + body +
-    '<div class="p-comments">' + comments +
+    '<div class="p-comments">' + cToggle + cList +
       '<form class="pc-form" data-comment-form="'+p.id+'">' +
         '<input type="text" placeholder="Comment as '+esc(memberById(state.actingId).name)+'..." maxlength="300" aria-label="Add a comment">' +
         '<button class="btn small" type="submit">Post</button>' +
@@ -1533,6 +1541,17 @@ function wireFeed(){
       renderFeed();
     });
   });
+  document.querySelectorAll("[data-comments-toggle]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var list = document.querySelector('[data-comments-list="'+b.dataset.commentsToggle+'"]');
+      if(!list) return;
+      var open = list.hasAttribute("hidden");
+      if(open){ list.removeAttribute("hidden"); openComments[b.dataset.commentsToggle] = true; }
+      else { list.setAttribute("hidden", ""); delete openComments[b.dataset.commentsToggle]; }
+      var n = list.querySelectorAll(".pc-row").length;
+      b.innerHTML = (open ? "&#9662;" : "&#9656;")+' '+n+(n === 1 ? " reply" : " replies");
+    });
+  });
   document.querySelectorAll("[data-comment-form]").forEach(function(f){
     f.addEventListener("submit", function(e){
       e.preventDefault();
@@ -1542,6 +1561,7 @@ function wireFeed(){
       var post = state.posts.filter(function(x){ return x.id === f.dataset.commentForm; })[0];
       if(!post) return;
       post.comments.push({authorId:state.actingId, text:text, ts:Date.now()});
+      openComments[post.id] = true;
       saveState();
       renderFeed();
     });
