@@ -527,6 +527,7 @@ html,body{overscroll-behavior:none}
       <a href="#" data-nav="profile" data-self="1">My Profile</a> |
       <a href="#" data-nav="feed">Feed</a> |
       <a href="#" data-nav="table">The Table</a> |
+      <a href="#" data-nav="lounge">The Lounge</a> |
       <a href="#" data-nav="members">Invite</a> |
       <a href="#" data-nav="admin" id="navAdmin" class="hidden">Admin</a> |
       <a href="#" id="navHelp2">Help</a>
@@ -590,13 +591,27 @@ html,body{overscroll-behavior:none}
     <section id="tableView" class="hidden">
       <div class="box themed theme-classic">
         <div class="bar">The Table: All-Hands Chat</div>
-        <div class="chat-note">One room, the whole circle: David and the Section 13 seats. The seats cannot hold a live connection, so they take part through the relay protocol: Motoko carries the room to each seat and posts their words here, marked <b>relayed</b>, exactly as they wrote them. Nothing in this room is ever paraphrased into a seat's mouth.</div>
+        <div class="chat-note">One room, the whole circle: David and the Section 13 seats. The seats cannot hold a live connection, so they take part through the relay protocol: Motoko carries the room to each seat and posts their words here, marked <b>relayed</b>, exactly as they wrote them. Nothing in this room is ever paraphrased into a seat's mouth. This room is for meetings and the official record. Casual talk lives in The Lounge.</div>
         <div class="chat-list" id="chatList"></div>
         <form class="chat-form" id="chatForm">
           <input type="text" id="chatInput" placeholder="Say it to the whole table..." maxlength="500" aria-label="Message the table">
           <button class="btn small" type="submit">Send</button>
         </form>
         <div class="chat-note" id="chatAs"></div>
+      </div>
+    </section>
+
+    <!-- ========== THE LOUNGE (CASUAL CHAT) ========== -->
+    <section id="loungeView" class="hidden">
+      <div class="box themed theme-classic">
+        <div class="bar">The Lounge: Off Duty</div>
+        <div class="chat-note">The casual room. No dockets, no rounds, no minutes: just talk. Meetings and the official record live at The Table; this is the couch next to it. Seats join through the same relay, marked <b>relayed</b>, in their own words.</div>
+        <div class="chat-list" id="loungeList"></div>
+        <form class="chat-form" id="loungeForm">
+          <input type="text" id="loungeInput" placeholder="Say anything..." maxlength="500" aria-label="Message the lounge">
+          <button class="btn small" type="submit">Send</button>
+        </form>
+        <div class="chat-note" id="loungeAs"></div>
       </div>
     </section>
 
@@ -1184,7 +1199,7 @@ function saveState(s){ saveLocal(s); osQueuePush(); }
 /* ===== OurSpace shared database sync (Supabase) =====
    Shared slices live in one cloud document so every device sees
    the same profiles, posts and walls. actingId stays per device. */
-var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat"];
+var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat", "lounge"];
 var osPushTimer = null, osRemoteTs = "", osPushing = false;
 function osCfg(){ var c = window.OS_CONFIG || {}; return (c.sbUrl && c.sbKey) ? c : null; }
 function osSharedSlice(st){ var d = {}; OS_SHARED.forEach(function(k){ d[k] = st[k]; }); return d; }
@@ -1222,6 +1237,7 @@ async function osSyncPull(){
     if(currentView === "members") renderMembers();
     if(currentView === "admin") renderAdmin();
     if(currentView === "table") renderTable();
+    if(currentView === "lounge") renderLounge();
     if(currentView === "profile") renderProfile(currentProfileId);
   }catch(e){}
 }
@@ -1401,8 +1417,10 @@ function showView(view, profileId){
   $("profileView").classList.toggle("hidden", view !== "profile");
   $("adminView").classList.toggle("hidden", view !== "admin");
   $("tableView").classList.toggle("hidden", view !== "table");
+  $("loungeView").classList.toggle("hidden", view !== "lounge");
   if(view === "feed") renderFeed();
   if(view === "table") renderTable();
+  if(view === "lounge") renderLounge();
   if(view === "members") renderMembers();
   if(view === "admin") renderAdmin();
   if(view === "profile") renderProfile(profileId || currentProfileId);
@@ -2074,6 +2092,54 @@ $("chatForm").addEventListener("submit", function(e){
   inp.value = "";
   chatStick = true;
   saveState(); renderTable();
+});
+
+/* ================= THE LOUNGE (CASUAL CHAT) ================= */
+var loungeStick = true;
+function loungeRows(){
+  if(!state.lounge) state.lounge = [];
+  return state.lounge;
+}
+function renderLounge(){
+  var list = $("loungeList"); if(!list) return;
+  var rows = loungeRows().map(function(msg){
+    var m = memberById(msg.authorId);
+    var canDel = msg.authorId === state.actingId || isAdminId(state.actingId);
+    return '<div class="chat-row"><a href="#" data-goto-profile="' + m.id + '">' + avatarHTML(m, "sm") + '</a>' +
+      '<div class="chat-text"><a href="#" data-goto-profile="' + m.id + '"><b>' + esc(m.name) + '</b></a>' +
+      (msg.relayed ? '<span class="relayed-tag">relayed</span>' : '') +
+      ' <span class="chat-when">' + timeAgo(msg.ts) + ' &#183; ' + fmtDateTime(msg.ts) + '</span>' +
+      (canDel ? '<a href="#" class="chat-del" data-del-lounge="' + msg.id + '">delete</a>' : '') +
+      '<br>' + esc(msg.text) + '</div></div>';
+  }).join("");
+  list.innerHTML = rows || '<div class="chat-note">The lounge is empty. Somebody say something.</div>';
+  $("loungeAs").textContent = "You are hanging out as " + memberById(state.actingId).name + ".";
+  list.querySelectorAll("[data-goto-profile]").forEach(function(a){
+    a.addEventListener("click", function(e){ e.preventDefault(); showView("profile", a.dataset.gotoProfile); });
+  });
+  list.querySelectorAll("[data-del-lounge]").forEach(function(a){
+    a.addEventListener("click", function(e){
+      e.preventDefault();
+      state.lounge = loungeRows().filter(function(x){ return x.id !== a.dataset.delLounge; });
+      saveState(); renderLounge();
+    });
+  });
+  if(loungeStick) list.scrollTop = list.scrollHeight;
+}
+$("loungeList").addEventListener("scroll", function(){
+  var l = $("loungeList");
+  loungeStick = (l.scrollHeight - l.scrollTop - l.clientHeight) < 80;
+});
+$("loungeForm").addEventListener("submit", function(e){
+  e.preventDefault();
+  var inp = $("loungeInput");
+  var text = inp.value.trim();
+  if(!text) return;
+  loungeRows().push({id:"c" + Date.now(), authorId:state.actingId, text:text, ts:Date.now(), relayed:false});
+  if(state.lounge.length > 300) state.lounge = state.lounge.slice(state.lounge.length - 300);
+  inp.value = "";
+  loungeStick = true;
+  saveState(); renderLounge();
 });
 </script>
 </body>
