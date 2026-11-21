@@ -464,9 +464,11 @@ html,body{overscroll-behavior:none}
     <div class="gate-logo">our<span>space</span></div>
     <div class="gate-tag">a place for our people</div>
     <p><b>Invite only. Members only.</b></p>
-    <p>This is a closed little network for a small circle of friends and family. No strangers, no ads, no algorithm. Logins here will be a username and a code. Until then, the door opens for the cool.</p>
+    <p>This is a closed little network for a small circle of friends and family. No strangers, no ads, no algorithm. Logins here will be a username and a code. The door opens for the cool, with the entry code.</p>
     <button type="button" class="cool-bar" id="coolBar"><span class="fill" id="coolFill"></span><span class="txt" id="coolTxt">ARE YOU COOL?</span></button>
-    <div class="gate-hint">Members sign in below. New here? Sign up with just a username and a password.<br>Or tap the cool bar and look around first.</div>
+    <input type="password" id="gateCode" placeholder="Entry code" inputmode="numeric" autocomplete="off" style="margin-top:10px">
+    <div class="err" id="gateErr"></div>
+    <div class="gate-hint">Members sign in below. New here? Sign up with just a username and a password.<br>Enter the code, then tap the cool bar to look around.</div>
     <div class="gate-auth">
       <div class="gate-auth-tabs">
         <button type="button" class="btn small" id="showSignIn">Sign In</button>
@@ -1308,8 +1310,12 @@ function showApp(){
   renderActAs();
   showView("feed");
 }
+var GATE_CODE = "042080";
+function gateCodeOk(){ var el = $("gateCode"); return !!el && (el.value || "").trim() === GATE_CODE; }
 var coolBusy = false;
 $("coolBar").addEventListener("click", function(){
+  if(!gateCodeOk()){ $("gateErr").textContent = "That code does not open this door."; $("gateCode").focus(); return; }
+  $("gateErr").textContent = "";
   if(coolBusy) return;
   coolBusy = true;
   var steps = [
@@ -1892,6 +1898,7 @@ $("showSignUp").addEventListener("click", function(){
   $("signInBox").classList.add("hidden");
 });
 $("siGo").addEventListener("click", function(){
+  if(!gateCodeOk()){ $("siErr").textContent = "Enter the entry code above first."; return; }
   var acc = findAccount($("siUser").value);
   if(!acc){ $("siErr").textContent = "No account with that username yet. Sign up first, it takes ten seconds."; return; }
   if(acc.pass === null || acc.pass === undefined){
@@ -1905,6 +1912,7 @@ $("siGo").addEventListener("click", function(){
   else { $("siErr").textContent = "Wrong password."; }
 });
 $("suGo").addEventListener("click", function(){
+  if(!gateCodeOk()){ $("suErr").textContent = "Enter the entry code above first."; return; }
   var err = createAccount($("suUser").value, $("suName").value, $("suPass").value);
   if(err){ $("suErr").textContent = err; return; }
   var acc = findAccount($("suUser").value);
