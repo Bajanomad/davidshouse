@@ -285,6 +285,13 @@ table.info tr:last-child th,table.info tr:last-child td{border-bottom:none}
 .pc-toggle{background:none;border:none;padding:2px 0 4px;color:var(--link);font:inherit;font-size:11px;font-weight:bold;cursor:pointer;letter-spacing:.4px}
 .pc-toggle:hover{color:var(--accent)}
 .pc-list{margin-top:2px}
+.pc-item{border-top:1px dotted var(--border)}
+.pc-item:first-child{border-top:none}
+.pc-head{display:flex;gap:7px;align-items:center;width:100%;background:none;border:none;padding:4px 0;color:var(--text);font:inherit;font-size:11px;cursor:pointer;text-align:left}
+.pc-head-text{min-width:0;flex:1}
+.pc-preview{display:block;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pc-arrow{color:var(--link);flex:none;font-weight:bold}
+.pc-full{padding:2px 0 5px}
 .pc-row{display:flex;gap:7px;padding:3px 0;line-height:1.5}
 .pc-row .pc-text{min-width:0;word-wrap:break-word}
 .pc-when{color:var(--muted);font-size:10px}
@@ -1199,6 +1206,7 @@ function saveState(s){ saveLocal(s); osQueuePush(); }
 var OS_SHARED = ["posts", "walls", "edits", "accounts", "customMembers", "deletedIds", "chat", "lounge"];
 var osPushTimer = null, osRemoteTs = "", osPushing = false;
 var openComments = {};
+var openReplies = {};
 function osCfg(){ var c = window.OS_CONFIG || {}; return (c.sbUrl && c.sbKey) ? c : null; }
 function osSharedSlice(st){ var d = {}; OS_SHARED.forEach(function(k){ d[k] = st[k]; }); return d; }
 function osHeaders(){ var c = osCfg(); return { "apikey": c.sbKey, "Authorization": "Bearer " + c.sbKey, "Content-Type": "application/json" }; }
@@ -1485,11 +1493,24 @@ function postHTML(p){
   if(p.type === "photo") body = '<div class="p-body">'+(p.text ? esc(p.text) : "")+'<img class="post-photo" src="'+esc(p.photo)+'" alt="Photo by '+esc(m.name)+'"></div>';
   if(p.type === "video") body = '<div class="p-body">'+(p.text ? esc(p.text) : "")+'<div class="p-vid">'+videoEmbedHTML(p.video)+'</div></div>';
   if(p.type === "poll") body = '<div class="p-body">'+pollHTML(p)+'</div>';
-  var comments = p.comments.map(function(c){
+  var comments = p.comments.map(function(c, idx){
     var cm = memberById(c.authorId);
-    return '<div class="pc-row"><a href="#" data-goto-profile="'+cm.id+'">'+avatarHTML(cm,"sm")+'</a>' +
-      '<div class="pc-text"><a href="#" data-goto-profile="'+cm.id+'"><b>'+esc(cm.name)+'</b></a> '+esc(c.text) +
-      ' <span class="pc-when">'+timeAgo(c.ts)+'</span></div></div>';
+    var firstLine = String(c.text || "").split("\n")[0];
+    var preview = firstLine.length > 90 ? firstLine.slice(0, 90) + "…" : firstLine;
+    var rKey = p.id + ":" + idx;
+    var rOpen = !!openReplies[rKey];
+    return '<div class="pc-item">' +
+      '<button type="button" class="pc-head" data-reply-toggle="'+rKey+'">' +
+        avatarHTML(cm,"sm") +
+        '<span class="pc-head-text"><b>'+esc(cm.name)+'</b> replied <span class="pc-when">'+timeAgo(c.ts)+'</span>' +
+        '<span class="pc-preview">'+esc(preview)+'</span></span>' +
+        '<span class="pc-arrow">'+(rOpen ? "&#9662;" : "&#9656;")+'</span>' +
+      '</button>' +
+      '<div class="pc-full" data-reply-full="'+rKey+'"'+(rOpen ? "" : " hidden")+'>' +
+        '<div class="pc-row"><a href="#" data-goto-profile="'+cm.id+'">'+avatarHTML(cm,"sm")+'</a>' +
+        '<div class="pc-text"><a href="#" data-goto-profile="'+cm.id+'"><b>'+esc(cm.name)+'</b></a> '+esc(c.text) +
+        ' <span class="pc-when">'+timeAgo(c.ts)+'</span></div></div>' +
+      '</div></div>';
   }).join("");
   var nComments = p.comments.length;
   var cOpen = !!openComments[p.id];
@@ -1552,6 +1573,18 @@ function wireFeed(){
       b.innerHTML = (open ? "&#9662;" : "&#9656;")+' '+n+(n === 1 ? " reply" : " replies");
     });
   });
+  document.querySelectorAll("[data-reply-toggle]").forEach(function(b){
+    b.addEventListener("click", function(){
+      var key = b.dataset.replyToggle;
+      var full = document.querySelector('[data-reply-full="'+key+'"]');
+      if(!full) return;
+      var open = full.hasAttribute("hidden");
+      if(open){ full.removeAttribute("hidden"); openReplies[key] = true; }
+      else { full.setAttribute("hidden", ""); delete openReplies[key]; }
+      var arrow = b.querySelector(".pc-arrow");
+      if(arrow) arrow.innerHTML = open ? "&#9662;" : "&#9656;";
+    });
+  });
   document.querySelectorAll("[data-comment-form]").forEach(function(f){
     f.addEventListener("submit", function(e){
       e.preventDefault();
@@ -1562,6 +1595,7 @@ function wireFeed(){
       if(!post) return;
       post.comments.push({authorId:state.actingId, text:text, ts:Date.now()});
       openComments[post.id] = true;
+      openReplies[post.id + ":" + (post.comments.length - 1)] = true;
       saveState();
       renderFeed();
     });
