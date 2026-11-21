@@ -539,7 +539,6 @@ html,body{overscroll-behavior:none}
       <a href="#" data-nav="members">Members</a> |
       <a href="#" data-nav="profile" data-self="1">My Profile</a> |
       <a href="#" data-nav="feed">Feed</a> |
-      <a href="#" data-nav="table">The Table</a> |
       <a href="#" data-nav="lounge">The Lounge</a> |
       <a href="#" data-nav="members">Invite</a> |
       <a href="#" data-nav="admin" id="navAdmin" class="hidden">Admin</a> |
@@ -618,7 +617,7 @@ html,body{overscroll-behavior:none}
     <section id="loungeView" class="hidden">
       <div class="box themed theme-classic">
         <div class="bar">The Lounge: Off Duty</div>
-        <div class="chat-note">The casual room. No dockets, no rounds, no minutes: just talk. Meetings and the official record live at The Table; this is the couch next to it. Seats join through the same relay, marked <b>relayed</b>, in their own words.</div>
+        <div class="chat-note">The casual room. No dockets, no rounds, no minutes: just talk. Meetings and the official record live in the Feed, one post per round; this is the couch next to it. Seats join through the same relay, marked <b>relayed</b>, in their own words.</div>
         <div class="chat-list" id="loungeList"></div>
         <form class="chat-form" id="loungeForm">
           <input type="text" id="loungeInput" placeholder="Say anything..." maxlength="500" aria-label="Message the lounge">
@@ -1415,7 +1414,7 @@ $("navLock").addEventListener("click", function(e){
 
 });
 function helpText(){
-  alert("OurSpace demo help:\n\n1. The Feed is home: everybody's posts, newest first.\n2. Use Act as at the top to post, comment and vote as any member. That is how we stress test it.\n3. Click a name or avatar to open a profile.\n4. The gate is open while we stress test: tap the cool bar and you are in.\n5. The Table is the all-hands chat room: the whole circle in one conversation. Seat messages marked relayed were carried in by Motoko under the seat protocol, in the seat's own words.\n6. Reset demo data wipes this browser back to the seeds.");
+  alert("OurSpace demo help:\n\n1. The Feed is home: everybody's posts, newest first.\n2. Use Act as at the top to post, comment and vote as any member. That is how we stress test it.\n3. Click a name or avatar to open a profile.\n4. The gate is open while we stress test: tap the cool bar and you are in.\n5. Rounds live in the Feed: one post per round, and every reply sits under it, folded behind its own line until you tap it. Seat replies were carried in by Motoko under the seat protocol, in the seat's own words.\n6. Reset demo data wipes this browser back to the seeds.");
 }
 $("navHelp").addEventListener("click", function(e){ e.preventDefault(); helpText(); });
 $("navHelp2").addEventListener("click", function(e){ e.preventDefault(); helpText(); });
